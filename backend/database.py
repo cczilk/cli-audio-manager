@@ -66,7 +66,7 @@ class Database:
         print("✓ Database initialized")
 
 
-# Test the database
+"""# Test the database
 if __name__ == "__main__":
     db = Database()
     conn = db.get_connection()
@@ -80,4 +80,4 @@ if __name__ == "__main__":
     for table in tables:
         print(f"  - {table[0]}")
     
-    conn.close()
+    conn.close()"""

@@ -135,15 +135,14 @@ class AudioDownloader:
         print(f"Added to download queue: {url}")
         return queue_id
 
-
+"""
 # Test the downloader
 if __name__ == "__main__":
     downloader = AudioDownloader()
     
-    # Test with a YouTube URL (use a real one)
     test_url = "https://www.youtube.com/watch?v=Us9BEYzqbXU"
     result = downloader.download_from_youtube(test_url)
     
     if result:
         print(f"\nSuccess! Downloaded to: {result['filepath']}")
-        print(f"Track ID in database: {result['track_id']}")
+        print(f"Track ID in database: {result['track_id']}")"""
