@@ -206,9 +206,3 @@ class MusicPlayer:
 # Test function
 if __name__ == "__main__":
     player = MusicPlayer()
-    
-    # TODO: Test playback
-    # player.play(track_id=1)  # Play track with ID 1
-    # time.sleep(5)
-    # player.pause()
-    # print(player.get_current_track_info())

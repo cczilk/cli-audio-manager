@@ -66,18 +66,3 @@ class Database:
         print("✓ Database initialized")
 
 
-"""# Test the database
-if __name__ == "__main__":
-    db = Database()
-    conn = db.get_connection()
-    cursor = conn.cursor()
-    
-    # Test query
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    tables = cursor.fetchall()
-    
-    print("Tables in database:")
-    for table in tables:
-        print(f"  - {table[0]}")
-    
-    conn.close()"""
