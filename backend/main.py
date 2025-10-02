@@ -1,9 +1,3 @@
-"""
-Main interface for which users will interact with
-Creates a loop that will read user commands ie, play, pause etc
-Parse user input with .split() to separate commands and arguments
-CLI will run forever until user types "exit" or presses CTRL+C
-"""
 import sys
 from player import MusicPlayer
 from downloader import AudioDownloader
@@ -22,13 +16,16 @@ class CLI:
         Display available commands
         """
         print("\n=== Music Player Commands ===")
-        print("  play [track_id]      - Play a track by ID (or resume if no ID)")
+        print("  play [track_id]      - Play a track by ID")
         print("  pause                - Pause playback")
         print("  stop                 - Stop playback")
         print("  next                 - Skip to next track in queue")
         print("  prev                 - Go to previous track")
-        print("  vol [0-100]          - Set volume")
+        print("  vol [0-100]          - Set volume (works in real-time!)")
         print("  now                  - Show currently playing track")
+        print("")
+        print("  shuffle              - Toggle shuffle mode")
+        print("  repeat [off|one|all] - Set repeat mode (or cycle through)")
         print("")
         print("  list                 - List all tracks in library")
         print("  search [query]       - Search for tracks")
@@ -50,6 +47,9 @@ class CLI:
         print("==============================\n")
     
     def list_tracks(self):
+        """
+        Display all tracks in library
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT id, title, artist, duration FROM tracks ORDER BY id")
@@ -65,12 +65,13 @@ class CLI:
         print("-" * 90)
         
         for track_id, title, artist, duration in tracks:
-            # Convert duration from seconds to MM:SS format
+            title = title or "Unknown Title"
+            artist = artist or "Unknown Artist"
+
             minutes = int(duration) // 60
             seconds = int(duration) % 60
             duration_str = f"{minutes}:{seconds:02d}"
             
-            # Truncate long titles/artists
             title_short = title[:37] + "..." if len(title) > 40 else title
             artist_short = artist[:22] + "..." if len(artist) > 25 else artist
             
@@ -79,10 +80,12 @@ class CLI:
         print(f"\nTotal tracks: {len(tracks)}\n")
     
     def search_tracks(self, query):
+        """
+        Search for tracks by title or artist
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
         
-        # Search in both title and artist fields (case insensitive)
         cursor.execute('''
             SELECT id, title, artist FROM tracks 
             WHERE title LIKE ? OR artist LIKE ?
@@ -102,25 +105,31 @@ class CLI:
         print()
     
     def handle_play(self, args):
+        """
+        Handle play command
+        """
         if args:
-            # Play specific track
             try:
                 track_id = int(args[0])
                 self.player.play(track_id)
             except ValueError:
                 print("Error: Track ID must be a number")
+            except Exception as e:
+                print(f"Error playing track: {e}")
         else:
-            # Resume playback
-            self.player.play()
-    
+            if not self.player.play():
+                print("Use: play [track_id] to play a track")
+            
     def handle_download(self, args):
+        """
+        Handle download command
+        """
         if not args:
             print("Usage: download [url]")
             return
         
         url = args[0]
         
-        # Determine platform 
         if 'youtube.com' in url or 'youtu.be' in url:
             print(f"Downloading from YouTube: {url}")
         elif 'soundcloud.com' in url:
@@ -128,14 +137,13 @@ class CLI:
         else:
             print("Warning: Unknown platform, trying anyway...")
         
-        # Start download 
         result = self.downloader.download_from_youtube(url)
         
         if result:
-            print(f"✓ Successfully downloaded: {result['title']}")
-            print(f"  Track ID: {result['track_id']}")
+            print(f"Successfully downloaded: {result['title']}")
+            print(f"Track ID: {result['track_id']}")
         else:
-            print("✗ Download failed")
+            print("Download failed")
     
     def handle_download_queue(self):
         """
@@ -153,11 +161,14 @@ class CLI:
         
         print("\n=== Download Queue ===")
         for item_id, url, status in queue_items:
-            status_emoji = "⏳" if status == "pending" else "✓" if status == "completed" else "✗"
-            print(f"{status_emoji} {item_id}: {url} [{status}]")
+            status_symbol = "..." if status == "pending" else "OK" if status == "completed" else "X"
+            print(f"[{status_symbol}] {item_id}: {url}")
         print()
     
     def handle_playlist_list(self):
+        """
+        List all playlists
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT id, name, created_at FROM playlists ORDER BY id")
@@ -174,11 +185,14 @@ class CLI:
         print()
     
     def handle_playlist_create(self, args):
+        """
+        Create new playlist
+        """
         if not args:
             print("Usage: playlist create [name]")
             return
         
-        name = ' '.join(args)  # Join all args as playlist name
+        name = ' '.join(args)
         
         conn = self.db.get_connection()
         cursor = conn.cursor()
@@ -187,27 +201,27 @@ class CLI:
         conn.commit()
         conn.close()
         
-        print(f"✓ Created playlist '{name}' (ID: {playlist_id})")
+        print(f"Created playlist '{name}' (ID: {playlist_id})")
     
     def handle_playlist_add(self, playlist_id, track_id):
+        """
+        Add track to playlist
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
         
-        # Verify playlist exists
         cursor.execute("SELECT id FROM playlists WHERE id=?", (playlist_id,))
         if not cursor.fetchone():
             conn.close()
             print(f"Error: Playlist {playlist_id} not found")
             return
         
-        # Verify track exists
         cursor.execute("SELECT id FROM tracks WHERE id=?", (track_id,))
         if not cursor.fetchone():
             conn.close()
             print(f"Error: Track {track_id} not found")
             return
         
-        # Get next position in playlist
         cursor.execute(
             "SELECT MAX(position) FROM playlist_tracks WHERE playlist_id=?",
             (playlist_id,)
@@ -215,7 +229,6 @@ class CLI:
         result = cursor.fetchone()
         next_position = (result[0] or 0) + 1
         
-        # Add track to playlist
         try:
             cursor.execute('''
                 INSERT INTO playlist_tracks (playlist_id, track_id, position)
@@ -223,7 +236,7 @@ class CLI:
             ''', (playlist_id, track_id, next_position))
             
             conn.commit()
-            print(f"✓ Added track {track_id} to playlist {playlist_id}")
+            print(f"Added track {track_id} to playlist {playlist_id}")
         except Exception as e:
             print(f"Error adding track to playlist: {e}")
         finally:
@@ -231,7 +244,7 @@ class CLI:
     
     def display_now_playing(self):
         """
-        Show currently playing track with progress
+        Show currently playing track
         """
         info = self.player.get_current_track_info()
         
@@ -239,58 +252,54 @@ class CLI:
             print("Nothing is currently playing")
             return
         
-        # Format time
         pos_min = int(info['position']) // 60
         pos_sec = int(info['position']) % 60
         dur_min = int(info['duration']) // 60
         dur_sec = int(info['duration']) % 60
         
-        status = "▶" if info['is_playing'] else "⏸"
+        status = "Playing" if info['is_playing'] else "Paused"
         
-        print(f"\n{status} Now Playing:")
+        print(f"\n{status}:")
         print(f"  {info['title']}")
         print(f"  by {info['artist']}")
         print(f"  [{pos_min}:{pos_sec:02d} / {dur_min}:{dur_sec:02d}]")
         print(f"  Volume: {info.get('volume', 50)}%")
+        
+        # Show playback modes
+        modes = []
+        if info.get('shuffle'):
+            modes.append("Shuffle")
+        if info.get('repeat') != 'off':
+            modes.append(f"Repeat: {info.get('repeat')}")
+        if modes:
+            print(f"  Modes: {', '.join(modes)}")
+        
         print()
     
     def run(self):
         """
         Main command loop
-        
-        How this works:
-        1. Display welcome message and help
-        2. Loop forever:
-           - Show prompt ">> "
-           - Get user input
-           - Split input into command and arguments
-           - Call appropriate handler based on command
-           - Handle errors gracefully
-        3. Exit on "exit" command or Ctrl+C
         """
-        print("♪ Welcome to Terminal Music Player! ♪")
+        print("Welcome to Terminal Music Player!")
         self.show_help()
         
         while True:
             try:
-                # Get user input
                 user_input = input(">> ").strip()
                 
                 if not user_input:
                     continue
                 
-                # Split into command and arguments
                 parts = user_input.split()
                 command = parts[0].lower()
                 args = parts[1:]
                 
-                # Handle commands
                 if command == 'help':
                     self.show_help()
                 
                 elif command in ('exit', 'quit'):
                     print("Goodbye!")
-                    self.player.stop()  # Clean up audio before exiting
+                    self.player.stop()
                     break
                 
                 elif command == 'play':
@@ -312,10 +321,7 @@ class CLI:
                     if args:
                         try:
                             volume = int(args[0])
-                            if 0 <= volume <= 100:
-                                self.player.set_volume(volume)
-                            else:
-                                print("Volume must be between 0 and 100")
+                            self.player.set_volume(volume)
                         except ValueError:
                             print("Volume must be a number (0-100)")
                     else:
@@ -343,7 +349,31 @@ class CLI:
                 elif command == 'process':
                     print("Processing download queue...")
                     self.downloader.process_queue()
-                
+                elif command == 'qadd-file':
+                    if args:
+                        try:
+                            with open(args[0], 'r') as f:
+                                urls = f.readlines()
+                            from queue_manager import QueueManager
+                            qm = QueueManager()
+                            qm.add_multiple_urls(urls)
+                        except FileNotFoundError:
+                            print(f"File not found: {args[0]}")
+                        except Exception as e:
+                            print(f"Error: {e}")
+                    else:
+                        print("Usage: qadd-file [filename.txt]")
+
+                elif command == 'queue-clear':
+                    if args and args[0] in ['completed', 'failed']:
+                        from queue_manager import QueueManager
+                        qm = QueueManager()
+                        if args[0] == 'completed':
+                            qm.clear_completed()
+                        else:
+                            qm.clear_failed()
+                    else:
+                        print("Usage: queue-clear [completed|failed]")
                 elif command == 'playlist':
                     if not args:
                         print("Usage: playlist [list|create|load|add]")
@@ -397,12 +427,22 @@ class CLI:
                 elif command == 'qclear':
                     self.player.clear_queue()
                 
+                elif command == 'shuffle':
+                    self.player.toggle_shuffle()
+                
+                elif command == 'repeat':
+                    if args:
+                        mode = args[0].lower()
+                        self.player.set_repeat(mode)
+                    else:
+                        self.player.cycle_repeat()
+                
                 else:
                     print(f"Unknown command: {command}. Type 'help' for commands.")
             
             except KeyboardInterrupt:
                 print("\n\nGoodbye!")
-                self.player.stop()  # Clean up audio before exiting
+                self.player.stop()
                 break
             
             except Exception as e:

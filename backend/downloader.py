@@ -14,8 +14,10 @@ class AudioDownloader:
         os.makedirs(self.download_dir, exist_ok=True)
         self.db = Database()
 
-    
-    def download_from_youtube(self, url):
+    def download_from_youtube(self, url):  
+        """
+        Download audio from YouTube URL
+        """
         ydl_opts = {
             'format': 'bestaudio/best',
             'postprocessors': [{
@@ -24,42 +26,60 @@ class AudioDownloader:
                 'preferredquality': '192',
             }],
             'outtmpl': os.path.join(self.download_dir, '%(title)s.%(ext)s'),
+            'quiet': False,
+            'restrictfilenames': True,  # make sure yt-dlp uses underscores consistently
         }
         
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Extract info without downloading to get metadata
                 print(f"Fetching info for: {url}")
                 info = ydl.extract_info(url, download=False)
-                ydl.download([url])
-
-                filepath = os.path.join(self.download_dir, f"{info['title']}.mp3")
                 
-                # Extract metadata
+                print(f"Downloading: {info['title']}")
+                ydl.download([url])
+                
+                filepath = ydl.prepare_filename(info)
+                filepath = os.path.splitext(filepath)[0] + '.mp3'
+                
+                if not os.path.exists(filepath):
+                    print(f"Warning: File not found at {filepath}")
+                    return None
+                
                 title = info.get('title', 'Unknown')
                 artist = info.get('artist', info.get('uploader', 'Unknown'))
                 duration = info.get('duration', 0)
                 
-                print(f"Downloaded: {title} by {artist}")
+                print(f"✓ Downloaded: {title} by {artist}")
+                print(f"  Saved to: {filepath}")
+                
                 track_id = self.add_to_library(filepath, title, artist, url, duration)
-
+                
                 return {
+                    'track_id': track_id,
                     'filepath': filepath,
                     'title': title,
                     'artist': artist,
                     'duration': duration,
-                    'source_url': url,
-                    'track_id': track_id
+                    'source_url': url
                 }
+                
         except Exception as e:
-            print(f"Error downloading: {e}")
+            print(f"✗ Error downloading: {e}")
+            import traceback
+            traceback.print_exc()
             return None
     
     def download_from_soundcloud(self, url):
-        # SoundCloud downloads work the same way as YouTube with yt_dlp
+        """
+        Download audio from SoundCloud
+        SoundCloud downloads work the same way as YouTube with yt_dlp
+        """
         return self.download_from_youtube(url)
     
     def add_to_library(self, filepath, title, artist, source_url, duration):
+        """
+        Add downloaded track to database
+        """
         conn = self.db.get_connection()
         cursor = conn.cursor()
 
@@ -74,6 +94,21 @@ class AudioDownloader:
 
         return track_id
 
+    def add_to_queue(self, url):
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            INSERT INTO download_queue (url, status)
+            VALUES (?, 'pending')
+        ''', (url,))
+        
+        queue_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+
+        print(f"✓ Added to download queue: {url}")
+        return queue_id
     
     def process_queue(self):
         """
@@ -85,6 +120,11 @@ class AudioDownloader:
 
         cursor.execute("SELECT id, url FROM download_queue WHERE status='pending'")
         pending = cursor.fetchall()
+        
+        if not pending:
+            print("No pending downloads in queue")
+            return
+        
         print(f"Processing {len(pending)} downloads...")
         
         for queue_id, url in pending:
@@ -113,25 +153,13 @@ class AudioDownloader:
                 conn.commit()
         
         conn.close()
-        print("Queue processing complete")
+        print("✓ Queue processing complete")
 
 
-    def add_to_queue(self, url):
-        """
-        Add URL to download queue for batch processing later
-        """
-        conn = self.db.get_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO download_queue (url, status)
-            VALUES (?, 'pending')
-        ''', (url,))
-        
-        queue_id = cursor.lastrowid
-        conn.commit()
-        conn.close()
 
-        print(f"Added to download queue: {url}")
-        return queue_id
-
+if __name__ == "__main__":
+    downloader = AudioDownloader()
+    
+    if result:
+        print(f"\nSuccess! Downloaded to: {result['filepath']}")
+        print(f"Track ID in database: {result['track_id']}")

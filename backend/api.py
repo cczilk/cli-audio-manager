@@ -12,14 +12,9 @@ player = MusicPlayer()
 downloader = AudioDownloader()
 db = Database()
 
-# ============= TRACK ENDPOINTS =============
 
 @app.route('/api/tracks', methods=['GET'])
 def get_tracks():
-    """
-    Get all tracks from library.
-    Returns JSON array of all tracks.
-    """
     conn = db.get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, title, artist, duration, source_url, added_at FROM tracks")
@@ -41,7 +36,6 @@ def get_tracks():
 
 @app.route('/api/tracks/<int:track_id>', methods=['GET'])
 def get_track(track_id):
-    """Get single track by ID."""
     conn = db.get_connection()
     cursor = conn.cursor()
     cursor.execute(
@@ -65,7 +59,6 @@ def get_track(track_id):
 
 @app.route('/api/tracks/<int:track_id>', methods=['DELETE'])
 def delete_track(track_id):
-    """Delete track from library and filesystem."""
     conn = db.get_connection()
     cursor = conn.cursor()
     
@@ -90,11 +83,9 @@ def delete_track(track_id):
     
     return jsonify({'message': 'Track deleted successfully'})
 
-# ============= PLAYER ENDPOINTS =============
 
 @app.route('/api/player/play', methods=['POST'])
 def play():
-    """Play a track or resume playback."""
     data = request.json or {}
     track_id = data.get('track_id')
     
@@ -111,19 +102,16 @@ def play():
 
 @app.route('/api/player/pause', methods=['POST'])
 def pause():
-    """Pause playback."""
     player.pause()
     return jsonify({'status': 'paused'})
 
 @app.route('/api/player/stop', methods=['POST'])
 def stop():
-    """Stop playback."""
     player.stop()
     return jsonify({'status': 'stopped'})
 
 @app.route('/api/player/next', methods=['POST'])
 def next_track():
-    """Skip to next track in queue."""
     success = player.next_track()
     
     if success:
@@ -134,7 +122,6 @@ def next_track():
 
 @app.route('/api/player/previous', methods=['POST'])
 def previous_track():
-    """Go to previous track."""
     success = player.previous_track()
     
     if success:
@@ -145,7 +132,6 @@ def previous_track():
 
 @app.route('/api/player/volume', methods=['POST'])
 def set_volume():
-    """Set player volume."""
     data = request.json
     
     if not data or 'volume' not in data:
@@ -161,7 +147,6 @@ def set_volume():
 
 @app.route('/api/player/status', methods=['GET'])
 def get_status():
-    """Get current player status."""
     info = player.get_current_track_info()
     
     if info:
@@ -176,7 +161,6 @@ def get_status():
 
 @app.route('/api/player/queue', methods=['GET'])
 def get_player_queue():
-    """Get the playback queue."""
     conn = db.get_connection()
     cursor = conn.cursor()
     
@@ -203,7 +187,6 @@ def get_player_queue():
 
 @app.route('/api/player/queue', methods=['POST'])
 def add_to_player_queue():
-    """Add track to playback queue."""
     data = request.json
     
     if not data or 'track_id' not in data:
@@ -216,15 +199,12 @@ def add_to_player_queue():
 
 @app.route('/api/player/queue', methods=['DELETE'])
 def clear_player_queue():
-    """Clear the playback queue."""
     player.clear_queue()
     return jsonify({'message': 'Queue cleared'})
 
-# ============= DOWNLOAD ENDPOINTS =============
 
 @app.route('/api/download', methods=['POST'])
 def add_download():
-    """Add URL to download queue."""
     data = request.json
     
     if not data or 'url' not in data:
@@ -241,7 +221,6 @@ def add_download():
 
 @app.route('/api/download/queue', methods=['GET'])
 def get_download_queue():
-    """Get all items in download queue."""
     conn = db.get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, url, status, added_at FROM download_queue ORDER BY added_at")
@@ -261,18 +240,14 @@ def get_download_queue():
 
 @app.route('/api/download/process', methods=['POST'])
 def process_downloads():
-    """Process all pending downloads in queue."""
     try:
         downloader.process_queue()
         return jsonify({'message': 'Downloads processed'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# ============= PLAYLIST ENDPOINTS =============
-
 @app.route('/api/playlists', methods=['GET'])
 def get_playlists():
-    """Get all playlists."""
     conn = db.get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, name, created_at FROM playlists")
@@ -291,7 +266,6 @@ def get_playlists():
 
 @app.route('/api/playlists', methods=['POST'])
 def create_playlist():
-    """Create new playlist."""
     data = request.json
     
     if not data or 'name' not in data:
@@ -313,7 +287,6 @@ def create_playlist():
 
 @app.route('/api/playlists/<int:playlist_id>', methods=['GET'])
 def get_playlist(playlist_id):
-    """Get playlist with all tracks."""
     conn = db.get_connection()
     cursor = conn.cursor()
     
@@ -354,7 +327,6 @@ def get_playlist(playlist_id):
 
 @app.route('/api/playlists/<int:playlist_id>/tracks', methods=['POST'])
 def add_track_to_playlist(playlist_id):
-    """Add track to playlist."""
     data = request.json
     
     if not data or 'track_id' not in data:
@@ -399,7 +371,6 @@ def add_track_to_playlist(playlist_id):
 
 @app.route('/api/playlists/<int:playlist_id>/tracks/<int:track_id>', methods=['DELETE'])
 def remove_track_from_playlist(playlist_id, track_id):
-    """Remove track from playlist."""
     conn = db.get_connection()
     cursor = conn.cursor()
     
@@ -419,7 +390,6 @@ def remove_track_from_playlist(playlist_id, track_id):
 
 @app.route('/api/playlists/<int:playlist_id>/play', methods=['POST'])
 def play_playlist(playlist_id):
-    """Load and play a playlist."""
     success = player.load_playlist(playlist_id)
     
     if success:
@@ -428,19 +398,15 @@ def play_playlist(playlist_id):
     else:
         return jsonify({'error': 'Failed to load playlist'}), 400
 
-# ============= ERROR HANDLERS =============
 
 @app.errorhandler(404)
 def not_found(error):
-    """Handle 404 errors."""
     return jsonify({'error': 'Not found'}), 404
 
 @app.errorhandler(500)
 def internal_error(error):
-    """Handle 500 errors."""
     return jsonify({'error': 'Internal server error'}), 500
 
-# ============= RUN SERVER =============
 
 if __name__ == '__main__':
     print("Starting Music Player API server...")

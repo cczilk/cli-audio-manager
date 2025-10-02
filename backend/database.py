@@ -17,7 +17,6 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Tracks table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS tracks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +29,6 @@ class Database:
             )
         ''')
         
-        # Playlists table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS playlists (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,7 +37,6 @@ class Database:
             )
         ''')
         
-        # Playlist tracks junction table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS playlist_tracks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +48,6 @@ class Database:
             )
         ''')
         
-        # Download queue table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS download_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
