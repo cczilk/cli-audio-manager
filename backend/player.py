@@ -1,3 +1,6 @@
+"""
+player.py - Handles audio playback using mpv with IPC for control
+"""
 import subprocess
 import os
 import json
@@ -9,9 +12,6 @@ from database import Database
 
 class MusicPlayer:
     def __init__(self):
-        """
-        Initialize player with advanced playback features
-        """
         self.current_process = None
         self.current_track_id = None
         self.is_playing = False
@@ -22,12 +22,17 @@ class MusicPlayer:
         self.volume = 50
         self.socket_path = '/tmp/mpv-socket'
         
+        # Playback modes
         self.shuffle_mode = False
         self.repeat_mode = 'off'  # 'off', 'one', 'all'
-        self.original_queue = []  # Store original order for shuffle toggle
+        self.original_queue = []
         
+        # Monitoring thread
         self.monitor_thread = None
         self.should_monitor = False
+        
+        # Progress tracking
+        self.playback_start_time = None
         
     def _send_command(self, command):
         """Send command to mpv via IPC socket"""
@@ -41,9 +46,7 @@ class MusicPlayer:
             return False
 
     def _monitor_playback(self):
-        """
-        Monitor playback and auto-play next track when current ends
-        """
+        """Monitor playback and auto-play next track when current ends"""
         while self.should_monitor:
             if self.current_process and self.current_process.poll() is not None:
                 if self.is_playing and not self.is_paused:
@@ -87,16 +90,13 @@ class MusicPlayer:
                 return False
             
             try:
-                # Stop current playback if any
                 if self.current_process and self.current_process.poll() is None:
                     self.current_process.terminate()
                     self.current_process.wait(timeout=1)
                 
-                # Remove old socket if exists
                 if os.path.exists(self.socket_path):
                     os.remove(self.socket_path)
                 
-                # Start playback with IPC
                 self.current_process = subprocess.Popen(
                     [
                         'mpv',
@@ -114,8 +114,8 @@ class MusicPlayer:
                 self.current_track_id = track_id
                 self.is_playing = True
                 self.is_paused = False
+                self.playback_start_time = time.time()
                 
-                # Start monitoring thread if not already running
                 if not self.should_monitor:
                     self.should_monitor = True
                     self.monitor_thread = threading.Thread(target=self._monitor_playback, daemon=True)
@@ -134,7 +134,6 @@ class MusicPlayer:
                 print(f"Error playing track: {e}")
                 return False
         else:
-            # Resume playback if paused
             if self.is_paused and self.current_track_id:
                 if self._send_command({"command": ["set_property", "pause", False]}):
                     self.is_paused = False
@@ -170,6 +169,7 @@ class MusicPlayer:
         self.is_playing = False
         self.is_paused = False
         self.current_process = None
+        self.playback_start_time = None
         print("Stopped")
         return True
     
@@ -239,10 +239,7 @@ class MusicPlayer:
         return self.shuffle_mode
     
     def set_repeat(self, mode):
-        """
-        Set repeat mode
-        mode: 'off', 'one' (repeat current), 'all' (repeat queue)
-        """
+        """Set repeat mode: 'off', 'one', 'all'"""
         if mode not in ['off', 'one', 'all']:
             print("Invalid repeat mode. Use: off, one, or all")
             return False
@@ -257,14 +254,14 @@ class MusicPlayer:
         return True
     
     def cycle_repeat(self):
-        """Cycle through repeat modes: off -> one -> all -> off"""
+        """Cycle through repeat modes"""
         modes = ['off', 'one', 'all']
         current_idx = modes.index(self.repeat_mode)
         next_mode = modes[(current_idx + 1) % len(modes)]
         return self.set_repeat(next_mode)
     
     def set_volume(self, volume):
-        """Set volume (changes current track if playing)"""
+        """Set volume (works in real-time)"""
         if 0 <= volume <= 100:
             self.volume = volume
             if self.is_playing or self.is_paused:
@@ -272,13 +269,49 @@ class MusicPlayer:
                     print(f"Volume: {volume}%")
                     return True
                 else:
-                    print(f"Volume set to {volume}% (will apply when playback starts)")
+                    print(f"Volume set to {volume}% (will apply on next track)")
             else:
                 print(f"Volume set to {volume}%")
             return True
         else:
             print("Volume must be between 0-100")
             return False
+    
+    def get_progress(self):
+        """Get current playback progress"""
+        if not self.is_playing or not self.current_track_id or not self.playback_start_time:
+            return None
+        
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT duration FROM tracks WHERE id=?", (self.current_track_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if not result:
+            return None
+        
+        duration = result[0]
+        elapsed = time.time() - self.playback_start_time
+        
+        if elapsed > duration:
+            elapsed = duration
+        
+        progress_pct = (elapsed / duration) * 100
+        bar_length = 40
+        filled = int(bar_length * (elapsed / duration))
+        bar = '█' * filled + '░' * (bar_length - filled)
+        
+        mins_elapsed = int(elapsed // 60)
+        secs_elapsed = int(elapsed % 60)
+        mins_total = int(duration // 60)
+        secs_total = int(duration % 60)
+        
+        return {
+            'bar': bar,
+            'time': f"{mins_elapsed}:{secs_elapsed:02d} / {mins_total}:{secs_total:02d}",
+            'percent': int(progress_pct)
+        }
     
     def get_current_track_info(self):
         """Get info about currently playing track"""
@@ -388,11 +421,3 @@ class MusicPlayer:
                 print(f"{marker} {i+1}. {title} - {artist}")
         
         conn.close()
-
-
-if __name__ == "__main__":
-    player = MusicPlayer()
-    print("Player initialized with advanced features!")
-    print("- Auto-play next track")
-    print("- Shuffle mode")
-    print("- Repeat modes (off/one/all)")

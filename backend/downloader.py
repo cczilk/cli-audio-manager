@@ -1,23 +1,14 @@
-"""
-downloader.py - Handles downloading audio from YouTube and SoundCloud
-"""
 import yt_dlp
 import os
 from database import Database
 
 class AudioDownloader:
     def __init__(self, download_dir='./downloads'):
-        """
-        Initialize the downloader
-        """
         self.download_dir = os.path.abspath(download_dir)
         os.makedirs(self.download_dir, exist_ok=True)
         self.db = Database()
 
     def download_from_youtube(self, url):  
-        """
-        Download audio from YouTube URL
-        """
         ydl_opts = {
             'format': 'bestaudio/best',
             'postprocessors': [{
@@ -27,7 +18,7 @@ class AudioDownloader:
             }],
             'outtmpl': os.path.join(self.download_dir, '%(title)s.%(ext)s'),
             'quiet': False,
-            'restrictfilenames': True,  # make sure yt-dlp uses underscores consistently
+            'restrictfilenames': True, 
         }
         
         try:
@@ -132,7 +123,7 @@ class AudioDownloader:
                 result = self.download_from_youtube(url)
 
                 if result:
-                    cursor.execute(
+                    cursor.execute( 
                         "UPDATE download_queue SET status='completed' WHERE id=?",
                         (queue_id,)
                     )

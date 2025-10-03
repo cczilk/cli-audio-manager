@@ -1,3 +1,6 @@
+"""
+main.py - Command-line interface for the music player
+"""
 import sys
 from player import MusicPlayer
 from downloader import AudioDownloader
@@ -12,9 +15,7 @@ class CLI:
         print("✓ Ready!\n")
     
     def show_help(self):
-        """
-        Display available commands
-        """
+        """Display available commands"""
         print("\n=== Music Player Commands ===")
         print("  play [track_id]      - Play a track by ID")
         print("  pause                - Pause playback")
@@ -23,6 +24,7 @@ class CLI:
         print("  prev                 - Go to previous track")
         print("  vol [0-100]          - Set volume (works in real-time!)")
         print("  now                  - Show currently playing track")
+        print("  progress             - Show playback progress bar")
         print("")
         print("  shuffle              - Toggle shuffle mode")
         print("  repeat [off|one|all] - Set repeat mode (or cycle through)")
@@ -42,14 +44,14 @@ class CLI:
         print("  qadd [track_id]      - Add track to playback queue")
         print("  qclear               - Clear playback queue")
         print("")
+        print("  art                  - Show album art for current track (ASCII)")
+        print("")
         print("  help                 - Show this help")
         print("  exit                 - Quit the player")
         print("==============================\n")
     
     def list_tracks(self):
-        """
-        Display all tracks in library
-        """
+        """Display all tracks in library"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT id, title, artist, duration FROM tracks ORDER BY id")
@@ -80,9 +82,7 @@ class CLI:
         print(f"\nTotal tracks: {len(tracks)}\n")
     
     def search_tracks(self, query):
-        """
-        Search for tracks by title or artist
-        """
+        """Search for tracks by title or artist"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
         
@@ -105,9 +105,7 @@ class CLI:
         print()
     
     def handle_play(self, args):
-        """
-        Handle play command
-        """
+        """Handle play command"""
         if args:
             try:
                 track_id = int(args[0])
@@ -121,9 +119,7 @@ class CLI:
                 print("Use: play [track_id] to play a track")
             
     def handle_download(self, args):
-        """
-        Handle download command
-        """
+        """Handle download command"""
         if not args:
             print("Usage: download [url]")
             return
@@ -146,9 +142,7 @@ class CLI:
             print("Download failed")
     
     def handle_download_queue(self):
-        """
-        Show download queue status
-        """
+        """Show download queue status"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT id, url, status FROM download_queue ORDER BY added_at")
@@ -161,14 +155,12 @@ class CLI:
         
         print("\n=== Download Queue ===")
         for item_id, url, status in queue_items:
-            status_symbol = "..." if status == "pending" else "OK" if status == "completed" else "X"
+            status_symbol = "..." if status == "pending" else "✓" if status == "completed" else "✗"
             print(f"[{status_symbol}] {item_id}: {url}")
         print()
     
     def handle_playlist_list(self):
-        """
-        List all playlists
-        """
+        """List all playlists"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT id, name, created_at FROM playlists ORDER BY id")
@@ -185,9 +177,7 @@ class CLI:
         print()
     
     def handle_playlist_create(self, args):
-        """
-        Create new playlist
-        """
+        """Create new playlist"""
         if not args:
             print("Usage: playlist create [name]")
             return
@@ -204,9 +194,7 @@ class CLI:
         print(f"Created playlist '{name}' (ID: {playlist_id})")
     
     def handle_playlist_add(self, playlist_id, track_id):
-        """
-        Add track to playlist
-        """
+        """Add track to playlist"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
         
@@ -243,9 +231,7 @@ class CLI:
             conn.close()
     
     def display_now_playing(self):
-        """
-        Show currently playing track
-        """
+        """Show currently playing track"""
         info = self.player.get_current_track_info()
         
         if not info:
@@ -265,7 +251,6 @@ class CLI:
         print(f"  [{pos_min}:{pos_sec:02d} / {dur_min}:{dur_sec:02d}]")
         print(f"  Volume: {info.get('volume', 50)}%")
         
-        # Show playback modes
         modes = []
         if info.get('shuffle'):
             modes.append("Shuffle")
@@ -277,9 +262,7 @@ class CLI:
         print()
     
     def run(self):
-        """
-        Main command loop
-        """
+        """Main command loop"""
         print("Welcome to Terminal Music Player!")
         self.show_help()
         
@@ -330,6 +313,13 @@ class CLI:
                 elif command == 'now':
                     self.display_now_playing()
                 
+                elif command == 'progress':
+                    progress = self.player.get_progress()
+                    if progress:
+                        print(f"\n[{progress['bar']}] {progress['time']} ({progress['percent']}%)\n")
+                    else:
+                        print("No track playing")
+                
                 elif command == 'list':
                     self.list_tracks()
                 
@@ -349,31 +339,7 @@ class CLI:
                 elif command == 'process':
                     print("Processing download queue...")
                     self.downloader.process_queue()
-                elif command == 'qadd-file':
-                    if args:
-                        try:
-                            with open(args[0], 'r') as f:
-                                urls = f.readlines()
-                            from queue_manager import QueueManager
-                            qm = QueueManager()
-                            qm.add_multiple_urls(urls)
-                        except FileNotFoundError:
-                            print(f"File not found: {args[0]}")
-                        except Exception as e:
-                            print(f"Error: {e}")
-                    else:
-                        print("Usage: qadd-file [filename.txt]")
-
-                elif command == 'queue-clear':
-                    if args and args[0] in ['completed', 'failed']:
-                        from queue_manager import QueueManager
-                        qm = QueueManager()
-                        if args[0] == 'completed':
-                            qm.clear_completed()
-                        else:
-                            qm.clear_failed()
-                    else:
-                        print("Usage: queue-clear [completed|failed]")
+                
                 elif command == 'playlist':
                     if not args:
                         print("Usage: playlist [list|create|load|add]")
@@ -409,7 +375,6 @@ class CLI:
                         
                         else:
                             print(f"Unknown playlist command: {subcmd}")
-                            print("Usage: playlist [list|create|load|add]")
                 
                 elif command == 'q':
                     self.player.show_queue()
@@ -436,6 +401,26 @@ class CLI:
                         self.player.set_repeat(mode)
                     else:
                         self.player.cycle_repeat()
+                
+                elif command == 'art':
+                    info = self.player.get_current_track_info()
+                    if info:
+                        conn = self.db.get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT filepath FROM tracks WHERE id=?", (info['track_id'],))
+                        result = cursor.fetchone()
+                        conn.close()
+                        
+                        if result:
+                            from metadata_extractor import MetadataExtractor
+                            extractor = MetadataExtractor()
+                            art_path = extractor.extract_album_art(result[0])
+                            if art_path:
+                                extractor.display_album_art_terminal(art_path)
+                            else:
+                                print("No album art found in this file")
+                    else:
+                        print("No track currently playing")
                 
                 else:
                     print(f"Unknown command: {command}. Type 'help' for commands.")
