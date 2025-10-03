@@ -1,10 +1,8 @@
-"""
-main.py - Command-line interface for the music player
-"""
 import sys
 from player import MusicPlayer
 from downloader import AudioDownloader
 from database import Database
+from ascii_art_defaults import get_random_art
 
 class CLI:
     def __init__(self):
@@ -231,7 +229,6 @@ class CLI:
             conn.close()
     
     def display_now_playing(self):
-        """Show currently playing track"""
         info = self.player.get_current_track_info()
         
         if not info:
@@ -419,6 +416,7 @@ class CLI:
                                 extractor.display_album_art_terminal(art_path)
                             else:
                                 print("No album art found in this file")
+                                print(get_random_art())
                     else:
                         print("No track currently playing")
                 
