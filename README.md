@@ -3,7 +3,7 @@ Terminal-based audio player with web interface for managing YouTube/SoundCloud d
 ### Web Interface
 <img width="1886" height="907" alt="image" src="https://github.com/user-attachments/assets/101a7253-118a-4f58-99b5-44f83b8179d3" />
 
-### ClI Player
+### CLI Player
 <img width="889" height="911" alt="image" src="https://github.com/user-attachments/assets/49bb72e6-72c3-4194-819c-3fec0b34e1d4" />
 
 
