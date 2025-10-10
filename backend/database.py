@@ -1,6 +1,3 @@
-"""
-database.py - Handles SQLite database operations
-"""
 import sqlite3
 import os
 from datetime import datetime
@@ -17,6 +14,7 @@ class Database:
         conn = self.get_connection()
         cursor = conn.cursor()
         
+        # Tracks table with thumbnail_path
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS tracks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -25,10 +23,21 @@ class Database:
                 filepath TEXT NOT NULL,
                 source_url TEXT,
                 duration INTEGER,
+                thumbnail_path TEXT,
                 added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
+        # Check if thumbnail_path column exists, if not add it
+        cursor.execute("PRAGMA table_info(tracks)")
+        columns = [column[1] for column in cursor.fetchall()]
+        
+        if 'thumbnail_path' not in columns:
+            print("Migrating database: Adding thumbnail_path column...")
+            cursor.execute('ALTER TABLE tracks ADD COLUMN thumbnail_path TEXT')
+            print("✓ Migration complete")
+        
+        # Playlists table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS playlists (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,6 +46,7 @@ class Database:
             )
         ''')
         
+        # Playlist tracks junction table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS playlist_tracks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,6 +58,7 @@ class Database:
             )
         ''')
         
+        # Download queue table
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS download_queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,5 +71,3 @@ class Database:
         conn.commit()
         conn.close()
         print("✓ Database initialized")
-
-

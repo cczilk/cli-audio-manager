@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 from flask_cors import CORS
 from player import MusicPlayer
 from downloader import AudioDownloader
@@ -17,7 +17,7 @@ db = Database()
 def get_tracks():
     conn = db.get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, title, artist, duration, source_url, added_at FROM tracks")
+    cursor.execute("SELECT id, title, artist, duration, source_url, added_at, thumbnail_path FROM tracks")
     tracks = cursor.fetchall()
     conn.close()
     
@@ -29,7 +29,8 @@ def get_tracks():
             'artist': track[2],
             'duration': track[3],
             'source_url': track[4],
-            'added_at': track[5]
+            'added_at': track[5],
+            'has_thumbnail': track[6] is not None
         })
     
     return jsonify(result)
@@ -39,7 +40,7 @@ def get_track(track_id):
     conn = db.get_connection()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, title, artist, duration, filepath, source_url FROM tracks WHERE id=?",
+        "SELECT id, title, artist, duration, filepath, source_url, thumbnail_path FROM tracks WHERE id=?",
         (track_id,)
     )
     track = cursor.fetchone()
@@ -54,15 +55,37 @@ def get_track(track_id):
         'artist': track[2],
         'duration': track[3],
         'filepath': track[4],
-        'source_url': track[5]
+        'source_url': track[5],
+        'thumbnail_path': track[6]
     })
+
+@app.route('/api/tracks/<int:track_id>/thumbnail', methods=['GET'])
+def get_thumbnail(track_id):
+    """
+    Serve thumbnail image for a track
+    """
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT thumbnail_path FROM tracks WHERE id=?", (track_id,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result or not result[0]:
+        return jsonify({'error': 'No thumbnail found'}), 404
+    
+    thumbnail_path = result[0]
+    
+    if not os.path.exists(thumbnail_path):
+        return jsonify({'error': 'Thumbnail file not found'}), 404
+    
+    return send_file(thumbnail_path, mimetype='image/jpeg')
 
 @app.route('/api/tracks/<int:track_id>', methods=['DELETE'])
 def delete_track(track_id):
     conn = db.get_connection()
     cursor = conn.cursor()
     
-    cursor.execute("SELECT filepath FROM tracks WHERE id=?", (track_id,))
+    cursor.execute("SELECT filepath, thumbnail_path FROM tracks WHERE id=?", (track_id,))
     result = cursor.fetchone()
     
     if not result:
@@ -70,16 +93,26 @@ def delete_track(track_id):
         return jsonify({'error': 'Track not found'}), 404
     
     filepath = result[0]
+    thumbnail_path = result[1]
+    
     cursor.execute("DELETE FROM tracks WHERE id=?", (track_id,))
     cursor.execute("DELETE FROM playlist_tracks WHERE track_id=?", (track_id,))
     conn.commit()
     conn.close()
     
+    # Delete audio file
     try:
         if os.path.exists(filepath):
             os.remove(filepath)
     except Exception as e:
         print(f"Warning: Could not delete file {filepath}: {e}")
+    
+    # Delete thumbnail file
+    try:
+        if thumbnail_path and os.path.exists(thumbnail_path):
+            os.remove(thumbnail_path)
+    except Exception as e:
+        print(f"Warning: Could not delete thumbnail {thumbnail_path}: {e}")
     
     return jsonify({'message': 'Track deleted successfully'})
 
@@ -237,6 +270,21 @@ def get_download_queue():
         })
     
     return jsonify(result)
+
+@app.route('/api/download/queue/clear', methods=['POST'])
+def clear_download_queue():
+    """Clear all pending downloads from the queue"""
+    conn = db.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM download_queue WHERE status='pending'")
+    deleted_count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    
+    return jsonify({
+        'message': f'Cleared {deleted_count} pending downloads',
+        'deleted_count': deleted_count
+    })
 
 @app.route('/api/download/process', methods=['POST'])
 def process_downloads():
@@ -417,6 +465,8 @@ if __name__ == '__main__':
     print("  GET  /api/player/status")
     print("  POST /api/player/play")
     print("  GET  /api/playlists")
+    print("  GET  /api/tracks/<id>/thumbnail")
+    print("  POST /api/download/queue/clear")
     print("\nPress Ctrl+C to stop\n")
     
     app.run(debug=True, host='0.0.0.0', port=5000)

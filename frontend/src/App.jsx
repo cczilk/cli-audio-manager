@@ -1,7 +1,14 @@
+/* 
+  App.jsx - Main UI container for the music player
+  Handles the playback, download playlist managment and responsive layout
+*/
 import { useState, useEffect } from 'react';
 import { trackAPI, playerAPI, downloadAPI } from './api/client';
-import { Play, Pause, SkipForward, SkipBack, Download, Loader2, Music, Folder, ChevronRight, ChevronDown } from 'lucide-react';
 import toast, { Toaster } from 'react-hot-toast';
+import Header from './components/Header';
+import DownloadForm from './components/DownloadForm';
+import NowPlaying from './components/NowPlaying';
+import LibraryTree from './components/LibraryTree';
 import Terminal from './components/Terminal';
 
 function App() {
@@ -12,11 +19,25 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [expandedArtists, setExpandedArtists] = useState({});
+  const [isWideScreen, setIsWideScreen] = useState(window.innerWidth > 1400);
+  const [playlists, setPlaylists] = useState([]);
+  const [expandedPlaylists, setExpandedPlaylists] = useState({});
 
   useEffect(() => {
     loadTracks();
+    loadPlaylists();
     const interval = setInterval(updatePlayerStatus, 2000);
-    return () => clearInterval(interval);
+    
+    const handleResize = () => {
+      setIsWideScreen(window.innerWidth > 1400);
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   const loadTracks = async () => {
@@ -32,13 +53,37 @@ function App() {
     }
   };
 
+  const loadPlaylists = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/playlists');
+      const data = await response.json();
+      
+      // Fetch playlist details to include track list and count
+      const playlistsWithTracks = await Promise.all(
+        data.map(async (playlist) => {
+          const detailResponse = await fetch(`http://localhost:5000/api/playlists/${playlist.id}`);
+          const details = await detailResponse.json();
+          return {
+            ...playlist,
+            tracks: details.tracks || [],
+            track_count: details.tracks?.length || 0
+          };
+        })
+      );
+      
+      setPlaylists(playlistsWithTracks);
+    } catch (error) {
+      console.error('Failed to load playlists:', error);
+    }
+  };
+
   const updatePlayerStatus = async () => {
     try {
       const response = await playerAPI.getStatus();
       setCurrentTrack(response.data);
       setIsPlaying(response.data.is_playing);
     } catch (error) {
-      // Silent fail
+      // Fail silently - backend offline
     }
   };
 
@@ -106,21 +151,73 @@ function App() {
     }
   };
 
-  // Group tracks by artist
-  const groupedTracks = tracks.reduce((acc, track) => {
-    const artist = track.artist || 'Unknown Artist';
-    if (!acc[artist]) {
-      acc[artist] = [];
-    }
-    acc[artist].push(track);
-    return acc;
-  }, {});
-
   const toggleArtist = (artist) => {
     setExpandedArtists(prev => ({
       ...prev,
       [artist]: !prev[artist]
     }));
+  };
+
+  const togglePlaylist = (playlistId) => {
+    setExpandedPlaylists(prev => ({
+      ...prev,
+      [playlistId]: !prev[playlistId]
+    }));
+  };
+
+  const handleCreatePlaylist = async (name) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/playlists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      
+      if (response.ok) {
+        toast.success(`Playlist "${name}" created`);
+        await loadPlaylists();
+      } else {
+        toast.error('Failed to create playlist');
+      }
+    } catch (error) {
+      toast.error('Failed to create playlist');
+    }
+  };
+
+  const handlePlayPlaylist = async (playlistId) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/play`, {
+        method: 'POST'
+      });
+      
+      if (response.ok) {
+        toast.success('Playing playlist');
+        updatePlayerStatus();
+      } else {
+        toast.error('Failed to play playlist');
+      }
+    } catch (error) {
+      toast.error('Failed to play playlist');
+    }
+  };
+
+  const handleAddToPlaylist = async (playlistId, trackId) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/playlists/${playlistId}/tracks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ track_id: trackId })
+      });
+      
+      if (response.ok) {
+        toast.success('Added to playlist');
+        await loadPlaylists();
+      } else {
+        toast.error('Failed to add to playlist');
+      }
+    } catch (error) {
+      toast.error('Failed to add to playlist');
+    }
   };
 
   return (
@@ -136,152 +233,149 @@ function App() {
         }}
       />
       
-      <div className="max-w-7xl mx-auto p-6">
-        {/* Header */}
-        <div className="mb-6 border-b border-green-800 pb-4">
-          <h1 className="text-2xl mb-2">
-            <span className="text-green-500">~/</span>terminal-music-player
-          </h1>
-          <p className="text-green-600 text-sm">$ music-player --interactive</p>
-        </div>
-
-        {/* Download Section */}
-        <div className="mb-6 bg-gray-900 border border-green-800 rounded p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-green-500">$</span>
-            <span className="text-green-600">download</span>
-          </div>
-          <form onSubmit={handleDownload} className="flex gap-2">
-            <input
-              type="text"
-              value={downloadUrl}
-              onChange={(e) => setDownloadUrl(e.target.value)}
-              placeholder="https://youtube.com/..."
-              disabled={downloading}
-              className="flex-1 bg-black border border-green-800 rounded px-3 py-2 text-green-400 focus:outline-none focus:border-green-500 disabled:opacity-50"
+      {/* Wide Screen Layout (Fullscreen) */}
+      {isWideScreen ? (
+        <div className="grid grid-cols-12 gap-6 p-6 h-screen">
+          {/* Left Column: Header + Download + Terminal */}
+          <div className="col-span-3 flex flex-col gap-6">
+            <Header />
+            <DownloadForm
+              downloadUrl={downloadUrl}
+              setDownloadUrl={setDownloadUrl}
+              downloading={downloading}
+              onSubmit={handleDownload}
             />
-            <button
-              type="submit"
-              disabled={downloading}
-              className="bg-green-900 hover:bg-green-800 disabled:bg-gray-800 px-4 py-2 rounded border border-green-700 transition flex items-center gap-2"
-            >
-              {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
-              {downloading ? 'downloading...' : 'download'}
-            </button>
-          </form>
+            <div className="flex-1 overflow-hidden">
+              <Terminal />
+            </div>
+          </div>
+
+          {/* Middle Column: Library */}
+          <div className="col-span-6 overflow-auto">
+            <LibraryTree
+              tracks={tracks}
+              loading={loading}
+              expandedArtists={expandedArtists}
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              playlists={playlists}
+              expandedPlaylists={expandedPlaylists}
+              onToggleArtist={toggleArtist}
+              onPlayTrack={handlePlay}
+              onCreatePlaylist={handleCreatePlaylist}
+              onPlayPlaylist={handlePlayPlaylist}
+              onAddToPlaylist={handleAddToPlaylist}
+              onTogglePlaylist={togglePlaylist}
+            />
+          </div>
+
+          {/* Right Column: Album Art + Now Playing */}
+          <div className="col-span-3 flex flex-col gap-6">
+            <div className="bg-gray-900 border border-green-800 rounded p-4">
+              <div className="aspect-square bg-black border border-green-700 rounded flex items-center justify-center overflow-hidden mb-4">
+                {currentTrack?.track_id ? (
+                  <img 
+                    src={`http://localhost:5000/api/tracks/${currentTrack.track_id}/thumbnail`}
+                    alt="Album Art"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <div className="text-center" style={{ display: currentTrack?.track_id ? 'none' : 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div className="text-4xl mb-2 text-green-800">♪</div>
+                  <p className="text-green-800 text-xs">No track playing</p>
+                </div>
+              </div>
+            </div>
+
+            <NowPlaying
+              currentTrack={currentTrack}
+              isPlaying={isPlaying}
+              onPlay={handlePlay}
+              onPause={handlePause}
+              onNext={handleNext}
+              onPrevious={handlePrevious}
+            />
+          </div>
         </div>
-
-        {/* Now Playing */}
-        {currentTrack?.title && (
-          <div className="mb-6 bg-gray-900 border border-green-700 rounded p-4">
-            <div className="flex items-center gap-2 mb-3 text-green-500">
-              <Music size={16} />
-              <span>now_playing</span>
-            </div>
-            <div className="ml-6 mb-4">
-              <p className="text-green-300">{currentTrack.title}</p>
-              <p className="text-green-600 text-sm">by {currentTrack.artist}</p>
-            </div>
-            
-            <div className="flex gap-2 ml-6">
-              <button 
-                onClick={handlePrevious}
-                className="bg-black border border-green-800 hover:border-green-600 p-2 rounded transition"
-              >
-                <SkipBack size={16} />
-              </button>
-              <button 
-                onClick={isPlaying ? handlePause : () => handlePlay(currentTrack.track_id)}
-                className="bg-green-900 hover:bg-green-800 border border-green-700 p-2 rounded transition"
-              >
-                {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-              </button>
-              <button 
-                onClick={handleNext}
-                className="bg-black border border-green-800 hover:border-green-600 p-2 rounded transition"
-              >
-                <SkipForward size={16} />
-              </button>
-            </div>
+      ) : (
+        // Narrow Screen Layout (Split screen or mobile)
+        <div className="container mx-auto p-6 max-w-none px-8">
+          <div className="flex justify-center mb-6">
+            <Header />
           </div>
-        )}
 
-        {/* Library - Tree View */}
-        <div className="bg-gray-900 border border-green-800 rounded p-4">
-          <div className="flex items-center gap-2 mb-4 text-green-500">
-            <Folder size={16} />
-            <span>library/ ({tracks.length} tracks)</span>
+          <div className="max-w-5xl mx-auto mb-8">
+            <DownloadForm
+              downloadUrl={downloadUrl}
+              setDownloadUrl={setDownloadUrl}
+              downloading={downloading}
+              onSubmit={handleDownload}
+            />
           </div>
-          
-          {loading ? (
-            <div className="flex items-center gap-2 ml-6 text-green-600">
-              <Loader2 size={16} className="animate-spin" />
-              <span>loading...</span>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div className="lg:col-span-2">
+              <LibraryTree
+                tracks={tracks}
+                loading={loading}
+                expandedArtists={expandedArtists}
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                playlists={playlists}
+                expandedPlaylists={expandedPlaylists}
+                onToggleArtist={toggleArtist}
+                onPlayTrack={handlePlay}
+                onCreatePlaylist={handleCreatePlaylist}
+                onPlayPlaylist={handlePlayPlaylist}
+                onAddToPlaylist={handleAddToPlaylist}
+                onTogglePlaylist={togglePlaylist}
+              />
             </div>
-          ) : tracks.length === 0 ? (
-            <div className="ml-6 text-green-600">
-              <p>└─ empty/</p>
-              <p className="ml-6 text-green-700">$ download some tracks to get started</p>
-            </div>
-          ) : (
-            <div className="ml-6 space-y-1">
-              {Object.entries(groupedTracks).map(([artist, artistTracks], index) => {
-                const isExpanded = expandedArtists[artist] ?? false;
-                const isLast = index === Object.keys(groupedTracks).length - 1;
-                
-                return (
-                  <div key={artist}>
-                    <div 
-                      onClick={() => toggleArtist(artist)}
-                      className="flex items-center gap-2 hover:text-green-300 cursor-pointer group"
-                    >
-                      <span>{isLast ? '└─' : '├─'}</span>
-                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      <Folder size={14} className="text-green-600" />
-                      <span className="group-hover:underline">{artist}/ ({artistTracks.length})</span>
-                    </div>
-                    
-                    {isExpanded && (
-                      <div className="ml-6 space-y-1 mt-1">
-                        {artistTracks.map((track, trackIndex) => {
-                          const isCurrentTrack = currentTrack?.track_id === track.id;
-                          const isLastTrack = trackIndex === artistTracks.length - 1;
-                          
-                          return (
-                            <div
-                              key={track.id}
-                              onClick={() => handlePlay(track.id)}
-                              className={`flex items-center gap-2 cursor-pointer hover:text-green-300 ${
-                                isCurrentTrack ? 'text-green-200' : ''
-                              }`}
-                            >
-                              <span>{isLastTrack ? '└─' : '├─'}</span>
-                              {isCurrentTrack && isPlaying ? (
-                                <span className="animate-pulse">▶</span>
-                              ) : (
-                                <Music size={14} className="text-green-700" />
-                              )}
-                              <span className="flex-1 truncate">{track.title}</span>
-                              <span className="text-green-700 text-xs">
-                                {Math.floor(track.duration / 60)}:{(track.duration % 60).toString().padStart(2, '0')}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+
+            <div className="space-y-6">
+              <div className="bg-gray-900 border border-green-800 rounded p-4">
+                <div className="aspect-square bg-black border border-green-700 rounded flex items-center justify-center overflow-hidden mb-4">
+                  {currentTrack?.track_id ? (
+                    <img 
+                      src={`http://localhost:5000/api/tracks/${currentTrack.track_id}/thumbnail`}
+                      alt="Album Art"
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Fallback if image fails to load
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'flex';
+                      }}
+                    />
+                  ) : null}
+                  <div className="text-center" style={{ display: currentTrack?.track_id ? 'none' : 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <div className="text-4xl mb-2 text-green-800">♪</div>
+                    <p className="text-green-800 text-xs">No track playing</p>
                   </div>
-                );
-              })}
+                </div>
+              </div>
+
+              <NowPlaying
+                currentTrack={currentTrack}
+                isPlaying={isPlaying}
+                onPlay={handlePlay}
+                onPause={handlePause}
+                onNext={handleNext}
+                onPrevious={handlePrevious}
+              />
             </div>
-          )}
+          </div>
+
+          <div className="max-w-6xl mx-auto">
+            <Terminal />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
-  <div className="mt-6">
-  <Terminal />
-</div>
 }
 
 export default App;

@@ -8,7 +8,10 @@ class AudioDownloader:
         os.makedirs(self.download_dir, exist_ok=True)
         self.db = Database()
 
-    def download_from_youtube(self, url):  
+    def download_from_youtube(self, url):
+        """
+        Download audio from YouTube URL and extract album art
+        """
         ydl_opts = {
             'format': 'bestaudio/best',
             'postprocessors': [{
@@ -18,7 +21,8 @@ class AudioDownloader:
             }],
             'outtmpl': os.path.join(self.download_dir, '%(title)s.%(ext)s'),
             'quiet': False,
-            'restrictfilenames': True, 
+            'restrictfilenames': True,
+            'writethumbnail': True,  
         }
         
         try:
@@ -32,6 +36,18 @@ class AudioDownloader:
                 filepath = ydl.prepare_filename(info)
                 filepath = os.path.splitext(filepath)[0] + '.mp3'
                 
+                # Check for downloaded thumbnail
+                thumbnail_path = None
+                possible_thumb_extensions = ['.jpg', '.png', '.webp']
+                base_filepath = os.path.splitext(filepath)[0]
+                
+                for ext in possible_thumb_extensions:
+                    thumb_file = base_filepath + ext
+                    if os.path.exists(thumb_file):
+                        thumbnail_path = thumb_file
+                        print(f"Found thumbnail: {thumb_file}")
+                        break
+                
                 if not os.path.exists(filepath):
                     print(f"Warning: File not found at {filepath}")
                     return None
@@ -42,8 +58,10 @@ class AudioDownloader:
                 
                 print(f"✓ Downloaded: {title} by {artist}")
                 print(f"  Saved to: {filepath}")
+                if thumbnail_path:
+                    print(f"  Album art: {thumbnail_path}")
                 
-                track_id = self.add_to_library(filepath, title, artist, url, duration)
+                track_id = self.add_to_library(filepath, title, artist, url, duration, thumbnail_path)
                 
                 return {
                     'track_id': track_id,
@@ -51,7 +69,8 @@ class AudioDownloader:
                     'title': title,
                     'artist': artist,
                     'duration': duration,
-                    'source_url': url
+                    'source_url': url,
+                    'thumbnail_path': thumbnail_path
                 }
                 
         except Exception as e:
@@ -67,22 +86,22 @@ class AudioDownloader:
         """
         return self.download_from_youtube(url)
     
-    def add_to_library(self, filepath, title, artist, source_url, duration):
+    def add_to_library(self, filepath, title, artist, source_url, duration, thumbnail_path=None):
         """
-        Add downloaded track to database
+        Add downloaded track to database with optional thumbnail
         """
         conn = self.db.get_connection()
         cursor = conn.cursor()
-
+        
         cursor.execute('''
-            INSERT INTO tracks (title, artist, filepath, source_url, duration)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (title, artist, filepath, source_url, duration))
+            INSERT INTO tracks (title, artist, filepath, source_url, duration, thumbnail_path)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (title, artist, filepath, source_url, duration, thumbnail_path))
         
         track_id = cursor.lastrowid
         conn.commit()
         conn.close()
-
+        
         return track_id
 
     def add_to_queue(self, url):
