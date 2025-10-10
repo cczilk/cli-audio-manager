@@ -21,7 +21,7 @@ Terminal-based audio player with web interface for managing YouTube/SoundCloud d
 
 ## Project Structure
 
-
+```
 cli-audio-manager/
 ├── backend/
 │ ├── main.py # CLI interface
@@ -40,4 +40,4 @@ cli-audio-manager/
 │ └── tailwind.config.js
 ├── LICENSE
 └── README.md
-
+```
