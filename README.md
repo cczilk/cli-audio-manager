@@ -20,6 +20,8 @@ Terminal-based audio player with web interface for managing YouTube/SoundCloud d
 **Prerequisites:** Python 3+, Node.js 16+, mpv, ffmpeg
 
 ## Project Structure
+
+
 cli-audio-manager/
 ├── backend/
 │ ├── main.py # CLI interface
@@ -38,3 +40,4 @@ cli-audio-manager/
 │ └── tailwind.config.js
 ├── LICENSE
 └── README.md
+
